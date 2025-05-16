@@ -18,7 +18,7 @@ export default function TaskEdit() {
   const [error, setError] = useState(null);
   const [token, setToken] = useState(null);
   const [alert, setAlert] = useState({ message: "", type: "info" });
-  const [priority, setPriority] = useState("normal");
+  const [priority, setPriority] = useState("");
 
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
@@ -43,6 +43,7 @@ export default function TaskEdit() {
           const data = await res.json();
           setTitle(data.title || "");
           setStatus(data.status || "");
+          setPriority(data.priority || "normal");
           setDescription(data.description || "");
           setDueDate(data.dueDate ? data.dueDate.split("T")[0] : "");
         } else if (res.status === 404) {

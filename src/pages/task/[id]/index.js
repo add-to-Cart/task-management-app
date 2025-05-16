@@ -59,7 +59,6 @@ export default function ViewTask() {
     switch (status) {
       case "todo":
         return "To-Do";
-      case "in_progress":
       case "in-progress":
         return "In Progress";
       case "completed":
@@ -126,8 +125,7 @@ export default function ViewTask() {
                   className={`px-3 py-1 rounded-full font-medium text-sm ${
                     task.status === "completed"
                       ? "bg-green-100 text-green-800"
-                      : task.status === "in-progress" ||
-                        task.status === "in-progress"
+                      : task.status === "in-progress"
                       ? "bg-yellow-100 text-yellow-800"
                       : task.status === "pending"
                       ? "bg-red-100 text-red-800"
