@@ -1,115 +1,295 @@
-import Image from "next/image";
-import { Geist, Geist_Mono } from "next/font/google";
+"use client";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import AuthenticatedLayout from "./components/AuthenticatedLayout";
+import Category from "./components/Category";
+import Alert from "./components/Alert";
+import PriorityBadge from "./components/Badge";
 
 export default function Home() {
+  const [token, setToken] = useState(null);
+  const [tasks, setTasks] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("");
+  const router = useRouter();
+  const [alert, setAlert] = useState({ message: "", type: "info" });
+
+  const colors = [
+    "#E3F2FD",
+    "#FFF3E0",
+    "#E8F5E9",
+    "#F3E5F5",
+    "#FFF9C4",
+    "#E0F7FA",
+    "#FFEBEE",
+    "#E8EAF6",
+    "#FCE4EC",
+    "#FFF8E1",
+  ];
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem("token");
+    if (!storedToken) {
+      router.push("/login");
+    } else {
+      setToken(storedToken);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    if (!token) return;
+    fetchTasks(token);
+  }, [token]);
+
+  const fetchTasks = async (token) => {
+    try {
+      const res = await fetch("/api/tasks", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const colored = data.map((task) => ({
+          ...task,
+          color: colors[task.id % colors.length],
+        }));
+        setTasks(colored.sort((a, b) => a.title.localeCompare(b.title)));
+      } else if (res.status === 401) {
+        localStorage.removeItem("token");
+        router.push("/login");
+      } else {
+        console.error("Failed to fetch tasks", res.status);
+      }
+    } catch (err) {
+      console.error("Error:", err);
+    }
+  };
+
+  const handleCreate = () => router.push("/create");
+
+  const handleDelete = async (id) => {
+    const res = await fetch(`/api/tasks/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+      showAlert("Task deleted successfully", "success");
+    } else {
+      showAlert("Failed to delete task", "error");
+    }
+  };
+
+  const handleEdit = (id, title) => {
+    setEditingId(id);
+    setEditTitle(title);
+  };
+
+  const saveEdit = async (id) => {
+    try {
+      const res = await fetch(`/api/tasks/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ title: editTitle }),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        updated.color = tasks.find((t) => t.id === id)?.color;
+        setTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
+        setEditingId(null);
+        setEditTitle("");
+        showAlert("Task updated successfully", "success");
+      }
+    } catch (err) {
+      showAlert("Failed to update task", "error");
+    }
+  };
+
+  const moveToInProgress = async (id) => {
+    try {
+      const res = await fetch(`/api/tasks/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: "in-progress" }),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        updated.color = tasks.find((t) => t.id === id)?.color;
+        setTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      }
+    } catch (err) {
+      console.error("Error updating status:", err);
+    }
+  };
+
+  const viewTaskDetails = (task) => router.push(`/task/${task.id}`);
+
+  const showAlert = (message, type = "info") => {
+    setAlert({ message, type });
+  };
+
+  const filteredTasks = tasks
+    .filter((t) => t.title.toLowerCase().includes(searchTerm.toLowerCase()))
+    .filter((t) => (!priorityFilter ? true : t.priority === priorityFilter));
+
+  const today = new Date();
+  const missedTasks = filteredTasks.filter(
+    (t) => t.status !== "completed" && t.dueDate && new Date(t.dueDate) < today
+  );
+
+  const grouped = {
+    todo: filteredTasks.filter((t) => t.status === "todo"),
+    "in-progress": filteredTasks.filter((t) => t.status === "in-progress"),
+    completed: filteredTasks.filter((t) => t.status === "completed"),
+  };
+
   return (
-    <div
-      className={`${geistSans.className} ${geistMono.className} grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]`}
-    >
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/pages/index.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <AuthenticatedLayout>
+      <Alert
+        message={alert.message}
+        type={alert.type}
+        duration={4000}
+        onClose={() => setAlert({ message: "", type: "info" })}
+      />
+      <main className="min-h-screen bg-gray-100 px-6 py-6 text-gray-900 font-sans">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8 pb-4 border-b border-gray-300">
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search tasks..."
+            className="w-full md:w-1/3 px-4 py-2 border border-gray-300 rounded-md text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+          />
+          <select
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value)}
+            className="w-full max-w-xs md:w-auto border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+            <option value="">All Priorities</option>
+            <option value="high">High</option>
+            <option value="normal">Normal</option>
+            <option value="low">Low</option>
+          </select>
+          <button
+            onClick={handleCreate}
+            className="w-full md:w-auto bg-blue-700 hover:bg-blue-800 hover:cursor-pointer text-white px-5 py-2 text-sm font-semibold rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+          >
+            Create Task
+          </button>
+        </div>
+
+        <div className="grid grid-cols-12 gap-6">
+          <section className="col-span-12 lg:col-span-3">
+            <h2 className="text-lg font-semibold mb-3">To Do</h2>
+            <div className="bg-white border border-gray-200 rounded p-4 space-y-3 max-h-[70vh] overflow-y-auto">
+              {grouped.todo.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No tasks found</p>
+              ) : (
+                grouped.todo.map((task) => (
+                  <div
+                    key={task.id}
+                    className="p-3 rounded border flex justify-between items-center hover:shadow-sm hover:cursor-pointer"
+                    style={{ backgroundColor: task.color }}
+                    onClick={() => viewTaskDetails(task)}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <span className="truncate text-sm font-medium text-gray-800 max-w-[70%]">
+                        {task.title}
+                      </span>
+                      <PriorityBadge priority={task.priority} />
+                    </div>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveToInProgress(task.id);
+                      }}
+                      className="text-xs bg-blue-700 text-white px-3 py-1 rounded hover:bg-blue-800 hover:cursor-pointer"
+                    >
+                      Start
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+            <h2 className="text-lg font-semibold mt-6 mb-3">Missed Tasks</h2>
+            <div className="bg-red-50 border border-red-200 rounded p-4 space-y-3 max-h-[40vh] overflow-y-auto">
+              {missedTasks.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No overdue tasks</p>
+              ) : (
+                missedTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="p-3 rounded border border-red-200 bg-red-100 flex justify-between items-center hover:shadow-sm hover:cursor-pointer"
+                    onClick={() => viewTaskDetails(task)}
+                  >
+                    <span className="truncate text-sm font-medium text-red-900 max-w-[55%]">
+                      {task.title}
+                    </span>
+                    <span className="text-xs text-red-700 italic mr-4">
+                      Due {new Date(task.dueDate).toLocaleDateString()}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation(); // Prevent navigating to details
+                        handleDelete(task.id);
+                      }}
+                      className="text-xs bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 hover:cursor-pointer"
+                      aria-label={`Delete task ${task.title}`}
+                      title={`Delete task ${task.title}`}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="col-span-12 lg:col-span-9 grid grid-cols-1 gap-6">
+            <Category
+              status="in-progress"
+              title="In Progress"
+              tasks={grouped["in-progress"]}
+              onDelete={handleDelete}
+              onEdit={handleEdit}
+              onSave={saveEdit}
+              editingId={editingId}
+              editTitle={editTitle}
+              setEditTitle={setEditTitle}
+              onViewDetails={viewTaskDetails}
+              onCancelEdit={() => setEditingId(null)}
+              className="bg-white border border-gray-200 rounded p-4 space-y-3 max-h-[70vh] overflow-y-auto"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+
+            <Category
+              status="completed"
+              title="Completed"
+              tasks={grouped.completed}
+              onDelete={handleDelete}
+              onEdit={handleEdit}
+              onSave={saveEdit}
+              editingId={editingId}
+              editTitle={editTitle}
+              setEditTitle={setEditTitle}
+              onViewDetails={viewTaskDetails}
+              onCancelEdit={() => setEditingId(null)}
+              className="bg-white border border-gray-200 rounded p-4 space-y-3 max-h-[70vh] overflow-y-auto"
+            />
+          </section>
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+    </AuthenticatedLayout>
   );
 }
